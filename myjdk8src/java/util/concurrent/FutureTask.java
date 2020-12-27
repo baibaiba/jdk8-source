@@ -91,7 +91,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
      */
     private volatile int state;
     private static final int NEW          = 0;
-    private static final int COMPLETING   = 1;//outcome 正在被set值（保存正常执行结果或者异常信息）的时候
+    private static final int COMPLETING   = 1;//任务已执行完成，outcome 正在被set值（保存正常执行结果或者异常信息）的时候
     private static final int NORMAL       = 2;
     private static final int EXCEPTIONAL  = 3;
     private static final int CANCELLED    = 4;
@@ -117,8 +117,10 @@ public class FutureTask<V> implements RunnableFuture<V> {
         Object x = outcome;
         if (s == NORMAL)
             return (V)x;
+        // 任务被取消，抛出异常CancellationException
         if (s >= CANCELLED)
             throw new CancellationException();
+        // 状态不满足完成条件，抛出计算异常ExecutionException
         throw new ExecutionException((Throwable)x);
     }
 
@@ -196,8 +198,10 @@ public class FutureTask<V> implements RunnableFuture<V> {
      */
     public V get() throws InterruptedException, ExecutionException {
         int s = state;
+        // 如果任务正在执行中，还没有将结果set outcome中，则调用 awaitDone() 方法阻塞自己
         if (s <= COMPLETING)
             s = awaitDone(false, 0L);
+        // 任务执行完成，已将结果set outcome中，返回结果
         return report(s);
     }
 
@@ -385,6 +389,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
                     Thread t = q.thread;
                     if (t != null) {
                         q.thread = null;
+                        // 唤醒等待队列中的线程
                         LockSupport.unpark(t);
                     }
                     WaitNode next = q.next;
@@ -404,44 +409,62 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
     /**
      * Awaits completion or aborts on interrupt or timeout.
+     * 等待完成或者中断或者超时
+     * <doc>
+     *     get 方法支持超时限制，如果没有传入超时时间，则接受的参数是 false 和 0L，
+     *     有等待就会有【队列排队】或者【可响应中断】，从方法签名上看有 InterruptedException，说明该方法这是可以被中断的
+     * </doc>
      *
-     * @param timed true if use timed waits
-     * @param nanos time to wait, if timed
-     * @return state upon completion
+     * @param timed true if use timed waits 如果使用定时等待，则为true
+     * @param nanos time to wait, if timed 等待时长
+     * @return state upon completion 等待完成后的状态
      */
     private int awaitDone(boolean timed, long nanos)
         throws InterruptedException {
+        // 计算等待截至时间
         final long deadline = timed ? System.nanoTime() + nanos : 0L;
         WaitNode q = null;
         boolean queued = false;
         for (;;) {
+            // 如果当前线程被中断，如果是，则在等待队列中删除该节点，并抛出 InterruptedException
             if (Thread.interrupted()) {
                 removeWaiter(q);
                 throw new InterruptedException();
             }
 
             int s = state;
+            // 状态大于 COMPLETING 说明已经达到某个最终状态（正常结束/异常结束/取消）
             if (s > COMPLETING) {
+                // 把 thread 设置为空，并返回结果
                 if (q != null)
                     q.thread = null;
                 return s;
             }
             else if (s == COMPLETING) // cannot time out yet
+                // 如果是COMPLETING 状态（中间状态），表示任务已结束，但 outcome 赋值还没结束，
+                // 这时主动让出执行权，让其他线程优先执行（只是发出这个信号，至于是否别的线程是否一定会执行可是不一定的）
                 Thread.yield();
             else if (q == null)
+                // 等待节点为空，将当前线程构造节点
                 q = new WaitNode();
             else if (!queued)
+                // 如果还没有入队列，则把当前节点加入waiters首节点并替换原来waiters
+                // WaitNode是一个stack，后进先出
                 queued = UNSAFE.compareAndSwapObject(this, waitersOffset,
                                                      q.next = waiters, q);
             else if (timed) {
+                // 如果设置超时时间
                 nanos = deadline - System.nanoTime();
+                // 超时时间到，则不再等待结果
                 if (nanos <= 0L) {
                     removeWaiter(q);
                     return state;
                 }
+                // 否则阻塞等待特定时间
                 LockSupport.parkNanos(this, nanos);
             }
             else
+                // 挂起当前线程，直到被其他线程唤醒
                 LockSupport.park(this);
         }
     }
