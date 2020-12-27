@@ -84,18 +84,18 @@ public class FutureTask<V> implements RunnableFuture<V> {
      * and cannot be further modified.
      *
      * Possible state transitions:
-     * NEW -> COMPLETING -> NORMAL
-     * NEW -> COMPLETING -> EXCEPTIONAL
-     * NEW -> CANCELLED
-     * NEW -> INTERRUPTING -> INTERRUPTED
+     * NEW -> COMPLETING -> NORMAL　//执行过程顺利完成
+     * NEW -> COMPLETING -> EXCEPTIONAL　//执行过程出现异常
+     * NEW -> CANCELLED　// 执行过程中被取消
+     * NEW -> INTERRUPTING -> INTERRUPTED　//执行过程中，线程被中断
      */
     private volatile int state;
     private static final int NEW          = 0;
-    private static final int COMPLETING   = 1;
+    private static final int COMPLETING   = 1;//outcome 正在被set值（保存正常执行结果或者异常信息）的时候
     private static final int NORMAL       = 2;
     private static final int EXCEPTIONAL  = 3;
     private static final int CANCELLED    = 4;
-    private static final int INTERRUPTING = 5;
+    private static final int INTERRUPTING = 5;//通过 cancel(true) 方法正在中断线程的时候
     private static final int INTERRUPTED  = 6;
 
     /** The underlying callable; nulled out after running */
@@ -161,12 +161,21 @@ public class FutureTask<V> implements RunnableFuture<V> {
         return state != NEW;
     }
 
+    /**
+     * 取消任务
+     * @param mayInterruptIfRunning true-如果执行这个任务的线程应该被中断;
+     *                              false-允许正在进行的任务完成
+     * @return 取消结果
+     */
     public boolean cancel(boolean mayInterruptIfRunning) {
+        // 如果状态是NEW，才能取消成功，否则直接取消失败
         if (!(state == NEW &&
               UNSAFE.compareAndSwapInt(this, stateOffset, NEW,
-                  mayInterruptIfRunning ? INTERRUPTING : CANCELLED)))
+                  mayInterruptIfRunning ? INTERRUPTING : CANCELLED))){
             return false;
+        }
         try {    // in case call to interrupt throws exception
+            // 中断正在执行任务的线程
             if (mayInterruptIfRunning) {
                 try {
                     Thread t = runner;
@@ -253,24 +262,30 @@ public class FutureTask<V> implements RunnableFuture<V> {
     }
 
     public void run() {
+        // 如果状态不是NEW，说明任务已经执行过或者任务已经被取消，直接返回
+        // 如果状态是NEW，则尝试把执行线程保存在　runnerOffset（runner字段），如果赋值失败，则直接返回　
         if (state != NEW ||
             !UNSAFE.compareAndSwapObject(this, runnerOffset,
                                          null, Thread.currentThread()))
             return;
         try {
+            // 获取构造函数传入的　callable值
             Callable<V> c = callable;
             if (c != null && state == NEW) {
                 V result;
                 boolean ran;
                 try {
+                    // 正常调用callable的call方法，获取返回值
                     result = c.call();
                     ran = true;
                 } catch (Throwable ex) {
                     result = null;
                     ran = false;
+                    // 保存 call 方法抛出的异常
                     setException(ex);
                 }
                 if (ran)
+                    // 保存 call 方法的执行结果
                     set(result);
             }
         } finally {
@@ -280,6 +295,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
             // state must be re-read after nulling runner to prevent
             // leaked interrupts
             int s = state;
+            // 如果任务被中断，则执行中断处理
             if (s >= INTERRUPTING)
                 handlePossibleCancellationInterrupt(s);
         }
