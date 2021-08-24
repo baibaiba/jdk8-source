@@ -4,6 +4,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicStampedReference;
 
+/**
+ * https://www.bejson.com/runcode/java/
+ * 在线运行
+ */
 public class CasABATest {
     private static AtomicInteger atomicInt = new AtomicInteger(100);
 
