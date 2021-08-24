@@ -2,9 +2,11 @@ package jdk8.source;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class HashMapTest {
     private static Map<String, String> map = new HashMap<>();
+    private static ConcurrentHashMap<String, String> concurrentHashMap = new ConcurrentHashMap<>();
 
 
     public static void main(String[] args) {
@@ -48,6 +50,25 @@ public class HashMapTest {
          *         table = newTab;
          *
          *         此时别的线程并发，获取为null
+         */
+
+
+        concurrentHashMap.put("a","b");
+
+        /**
+         *   if (tab == null || (n = tab.length) == 0)
+         *                 tab = initTable();
+         *             else if ((f = tabAt(tab, i = (n - 1) & hash)) == null) {
+         *                 if (casTabAt(tab, i, null,  // 关注点
+         *                              new Node<K,V>(hash, key, value, null)))
+         *                     break;                   // no lock when adding to empty bin
+         *             }else{
+         *                  synchronized (f) {
+         *                     if (tabAt(tab, i) == f) {
+         *                         ...
+         *                     }
+         *                 }
+         *             }
          */
     }
 }
