@@ -13,7 +13,16 @@
 
 ![模块源配置](images/module_source_setting.png)
 
-### 2.系统资源不足
+### 2.编译输出路径不存在
+
+![编译输出路径不存在](images/outputpath_not_specified.png)
+
+点击**File–>Project Structure–>Project**
+配置**Project compiler output**，指向项目根目录下的out目录即可
+
+![Project compiler output](images/outputpath_setting.png)
+
+### 3.系统资源不足
 
 ![系统资源不足](images/insufficient_resource.png)
 
@@ -25,7 +34,7 @@
 
 ![构建堆内存调整](images/build_heap_size.png)
 
-### 3.程序包com.sun.tools.javac.*不存在
+### 4.程序包com.sun.tools.javac.*不存在
 
 ![包不存在](images/package_not_found.png)
 
