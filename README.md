@@ -49,6 +49,15 @@
 
 ![添加包结果](images/add_libraries_result.png)
 
+### 5.找不到符号UNIXToolkit、FontConfigManager
+
+![找不到符号UNIXToolkit、FontConfigManager](images/fontconfigmanager_unixtoolkit_not_found.png)
+
+这是因为在Windows平台下缺少了两个java类文件所导致的。
+这两个类文件可在[OpenJDK](http://openjdk.java.net)网站上找到。
+
+![fontconfigmanager_unixtoolkit_source_path](images/fontconfigmanager_unixtoolkit_source_path.png)
+
 ## 完善项目设置
 
 ### 1.允许调试进入
