@@ -4,7 +4,16 @@
 
 ## 运行相关问题解决
 
-### 1.系统资源不足
+### 1.模块加载失败
+
+![模块加载失败](images/module_load_fail.png)
+
+点击**File–>Project Structure–>Modules**
+将src目录标记为Sources，将test目录标记为Tests
+
+![模块源配置](images/module_source_setting.png)
+
+### 2.系统资源不足
 
 ![系统资源不足](images/insufficient_resource.png)
 
@@ -16,7 +25,7 @@
 
 ![构建堆内存调整](images/build_heap_size.png)
 
-### 2.程序包com.sun.tools.javac.*不存在
+### 3.程序包com.sun.tools.javac.*不存在
 
 ![包不存在](images/package_not_found.png)
 
