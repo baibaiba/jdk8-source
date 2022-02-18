@@ -216,7 +216,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
      */
 
     volatile Object result;       // Either the result or boxed AltResult
-    volatile Completion stack;    // Top of Treiber stack of dependent actions
+    volatile Completion stack;    // Top of Treiber stack of dependent actions  依赖操作栈的栈顶
 
     final boolean internalComplete(Object r) { // CAS from null to r
         return UNSAFE.compareAndSwapObject(this, RESULT, null, r);
@@ -417,9 +417,9 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     }
 
     // Modes for Completion.tryFire. Signedness matters.
-    static final int SYNC   =  0;
-    static final int ASYNC  =  1;
-    static final int NESTED = -1;
+    static final int SYNC   =  0; // 同步
+    static final int ASYNC  =  1; // 异步
+    static final int NESTED = -1; // 迭代：为了避免无限递归
 
     /**
      * Spins before blocking in waitingGet.
@@ -440,7 +440,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     @SuppressWarnings("serial")
     abstract static class Completion extends ForkJoinTask<Void>
         implements Runnable, AsynchronousCompletionTask {
-        volatile Completion next;      // Treiber stack link
+        volatile Completion next;      // Treiber stack link // 无锁并发栈，(Completion next), 保存的是依靠当前的CompletableFuture一串任务，完成即触发（回调）
 
         /**
          * Performs completion action if triggered, returning a
@@ -448,7 +448,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
          *
          * @param mode SYNC, ASYNC, or NESTED
          */
-        abstract CompletableFuture<?> tryFire(int mode);
+        abstract CompletableFuture<?> tryFire(int mode); // 钩子方法
 
         /** Returns true if possibly still triggerable. Used by cleanStack. */
         abstract boolean isLive();
@@ -467,25 +467,25 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
      * Pops and tries to trigger all reachable dependents.  Call only
      * when known to be done.
      */
-    final void postComplete() {
+    final void postComplete() { // 在源任务完成之后会调用，逻辑：迭代堆栈的依赖任务。调用h.tryFire方法。NESTED就是为了避免递归死循环。因为postFire会调用postComplete。如果是NESTED，则不调用。
         /*
          * On each step, variable f holds current dependents to pop
          * and run.  It is extended along only one path at a time,
          * pushing others to avoid unbounded recursion.
          */
-        CompletableFuture<?> f = this; Completion h;
+        CompletableFuture<?> f = this; Completion h;  // f=当前CompletableFuture，n=下一个栈元素
         while ((h = f.stack) != null ||
-               (f != this && (h = (f = this).stack) != null)) {
+               (f != this && (h = (f = this).stack) != null)) { // 当f的stack为空时，使f重新指向当前的CompletableFuture，继续后面的节点
             CompletableFuture<?> d; Completion t;
-            if (f.casStack(h, t = h.next)) {
+            if (f.casStack(h, t = h.next)) { // 从头遍历stack，出栈元素
                 if (t != null) {
-                    if (f != this) {
+                    if (f != this) { // 如果f不是当前CompletableFuture，将刚出栈的h入当前CompletableFuture的栈顶，使树形结构变成链表结构，避免递归层次过深
                         pushStack(h);
-                        continue;
+                        continue; // 继续下一个节点，批量压入到当前栈中
                     }
                     h.next = null;    // detach
                 }
-                f = (d = h.tryFire(NESTED)) == null ? this : d;
+                f = (d = h.tryFire(NESTED)) == null ? this : d; // 调用头节点的tryFire()方法，该方法可看作Completion的钩子方法，执行完逻辑后，会向后传播
             }
         }
     }
@@ -519,9 +519,9 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     /** A Completion with a source, dependent, and executor. */
     @SuppressWarnings("serial")
     abstract static class UniCompletion<T,V> extends Completion {
-        Executor executor;                 // executor to use (null if none)
-        CompletableFuture<V> dep;          // the dependent to complete
-        CompletableFuture<T> src;          // source for action
+        Executor executor;                 // executor to use (null if none)    // 执行器
+        CompletableFuture<V> dep;          // the dependent to complete         // 依赖的任务
+        CompletableFuture<T> src;          // source for action                 // 被依赖的任务
 
         UniCompletion(Executor executor, CompletableFuture<V> dep,
                       CompletableFuture<T> src) {
@@ -534,13 +534,13 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
          * thread claims ownership.  If async, starts as task -- a
          * later call to tryFire will run action.
          */
-        final boolean claim() {
+        final boolean claim() { // 如果当前任务可以被执行，返回true，否则，返回false; 保证任务只被执行一次
             Executor e = executor;
             if (compareAndSetForkJoinTaskTag((short)0, (short)1)) {
-                if (e == null)
+                if (e == null) // 如果异步线程为null。说明同步。
                     return true;
                 executor = null; // disable
-                e.execute(this);
+                e.execute(this); // 如果异步线程不为null，那么使用异步线程去执行this。this继承Completion、Completion实现Runnable，所以执行的是Completion的run方法tryFire(ASYNC)。也就是在异步线程同步调用tryFire方法。达到其被异步线程执行的目的。
             }
             return false;
         }
@@ -625,10 +625,10 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
         Executor e, Function<? super T,? extends V> f) {
         if (f == null) throw new NullPointerException();
         CompletableFuture<V> d =  new CompletableFuture<V>();
-        if (e != null || !d.uniApply(this, f, null)) {
-            UniApply<T,V> c = new UniApply<T,V>(e, d, this, f);
+        if (e != null || !d.uniApply(this, f, null)) { // 检查依赖的那个任务是否完成，没有完成返回false,完成了返回true
+            UniApply<T,V> c = new UniApply<T,V>(e, d, this, f);// 构建任务入栈，并调用tryFire()方法；
             push(c);
-            c.tryFire(SYNC);
+            c.tryFire(SYNC); // 调一下钩子方法，检查一下任务是否结束
         }
         return d;
     }
@@ -664,7 +664,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
                 r = null;
             }
             try {
-                if (c != null && !c.claim())
+                if (c != null && !c.claim()) //判断当前任务是否可以执行
                     return false;
                 @SuppressWarnings("unchecked") S s = (S) r;
                 f.accept(s);
@@ -788,11 +788,11 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     private CompletableFuture<T> uniWhenCompleteStage(
         Executor e, BiConsumer<? super T, ? super Throwable> f) {
         if (f == null) throw new NullPointerException();
-        CompletableFuture<T> d = new CompletableFuture<T>();
-        if (e != null || !d.uniWhenComplete(this, f, null)) {
+        CompletableFuture<T> d = new CompletableFuture<T>(); // 构建future
+        if (e != null || !d.uniWhenComplete(this, f, null)) { // 如果线程池不为空，直接构建任务入栈，并调用tryFire()方法；否则，调用uniWhenComplete()方法，检查依赖的那个任务是否完成，没有完成返回false,// 如果线程池不为空，直接构建任务入栈，并调用tryFire()方法；否则，调用uniWhenComplete()方法，检查依赖的那个任务是否完成，没有完成返回false,
             UniWhenComplete<T> c = new UniWhenComplete<T>(e, d, this, f);
             push(c);
-            c.tryFire(SYNC);
+            c.tryFire(SYNC); // 先调一下钩子方法，检查一下任务是否结束
         }
         return d;
     }
@@ -1586,7 +1586,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     @SuppressWarnings("serial")
     static final class AsyncSupply<T> extends ForkJoinTask<Void>
             implements Runnable, AsynchronousCompletionTask {
-        CompletableFuture<T> dep; Supplier<T> fn;
+        CompletableFuture<T> dep; Supplier<T> fn; // fn作为这个Task的具体执行逻辑，函数式编程
         AsyncSupply(CompletableFuture<T> dep, Supplier<T> fn) {
             this.dep = dep; this.fn = fn;
         }
@@ -1601,12 +1601,12 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
                 dep = null; fn = null;
                 if (d.result == null) {
                     try {
-                        d.completeValue(f.get());
+                        d.completeValue(f.get()); // 等待源任务结束，并设置结果
                     } catch (Throwable ex) {
                         d.completeThrowable(ex);
                     }
                 }
-                d.postComplete();
+                d.postComplete(); // 源任务结束后，会执行所有依赖此任务的其他任务，这些任务以一个无锁并发栈（树形结构转的栈）的形式存在
             }
         }
     }
@@ -1615,7 +1615,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
                                                      Supplier<U> f) {
         if (f == null) throw new NullPointerException();
         CompletableFuture<U> d = new CompletableFuture<U>();
-        e.execute(new AsyncSupply<U>(d, f));
+        e.execute(new AsyncSupply<U>(d, f)); // AsyncSupply继承了ForkJoinTask, 实现了Runnable, AsynchronousCompletionTask接口
         return d;
     }
 
@@ -1719,7 +1719,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     private Object waitingGet(boolean interruptible) {
         Signaller q = null;
         boolean queued = false;
-        int spins = -1;
+        int spins = -1; // 用来在多核心环境下自旋操作的
         Object r;
         while ((r = result) == null) {
             if (spins < 0)
@@ -1905,7 +1905,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
      */
     public T get() throws InterruptedException, ExecutionException {
         Object r;
-        return reportGet((r = result) == null ? waitingGet(true) : r);
+        return reportGet((r = result) == null ? waitingGet(true) : r);// result字段表示任务的执行结果
     }
 
     /**
@@ -2387,10 +2387,10 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
             final sun.misc.Unsafe u;
             UNSAFE = u = sun.misc.Unsafe.getUnsafe();
             Class<?> k = CompletableFuture.class;
-            RESULT = u.objectFieldOffset(k.getDeclaredField("result"));
-            STACK = u.objectFieldOffset(k.getDeclaredField("stack"));
+            RESULT = u.objectFieldOffset(k.getDeclaredField("result")); //计算result属性的位偏移量
+            STACK = u.objectFieldOffset(k.getDeclaredField("stack")); //计算result属性的位偏移量
             NEXT = u.objectFieldOffset
-                (Completion.class.getDeclaredField("next"));
+                (Completion.class.getDeclaredField("next")); //计算result属性的位偏移量
         } catch (Exception x) {
             throw new Error(x);
         }

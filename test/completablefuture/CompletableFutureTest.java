@@ -1,3 +1,5 @@
+package completablefuture;
+
 import java.math.BigDecimal;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -31,7 +33,7 @@ public class CompletableFutureTest {
 
         // 真正的异步处理，我们传入回调函数，在future结束时自动调用该回调函数，这样我们就不用等待结果
         // 证明
-        long l = System.currentTimeMillis();
+        long start = System.currentTimeMillis();
         CompletableFuture<String> completableFuture2 = CompletableFuture.supplyAsync(() -> {
             try {
                 TimeUnit.SECONDS.sleep(3L);
@@ -65,16 +67,16 @@ public class CompletableFutureTest {
 
         logger.info("这是主线程");
         logger.info(completableFuture2.get());
-        logger.info(String.valueOf(System.currentTimeMillis() - l));
+        logger.info(String.valueOf(System.currentTimeMillis() - start));
 
         // thenCompose 前
-        CompletableFuture<CompletableFuture<CreditRating>> completableFutureCompletableFuture =
-                getUserInfo(1L).thenApply(CompletableFutureTest::getUserCredit);
-        // thenCompose 后
-        CompletableFuture<CreditRating> creditRatingCompletableFuture =
-                getUserInfo(1L).thenCompose(CompletableFutureTest::getUserCredit);
-        CreditRating creditRating = creditRatingCompletableFuture.get();
-        System.out.println(creditRating);
+        // CompletableFuture<CompletableFuture<CreditRating>> completableFutureCompletableFuture =
+        //         getUserInfo(1L).thenApply(CompletableFutureTest::getUserCredit);
+        // // thenCompose 后
+        // CompletableFuture<CreditRating> creditRatingCompletableFuture =
+        //         getUserInfo(1L).thenCompose(CompletableFutureTest::getUserCredit);
+        // CreditRating creditRating = creditRatingCompletableFuture.get();
+        // System.out.println(creditRating);
 
         // 1.听说 ForkJoinPool 线程池效率更高，为什么呢？
         // 2.如果批量处理异步程序，有什么可用的方案吗？
