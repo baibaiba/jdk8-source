@@ -230,7 +230,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     final boolean tryPushStack(Completion c) {
         Completion h = stack;
         lazySetNext(c, h);
-        return UNSAFE.compareAndSwapObject(this, STACK, h, c);
+        return UNSAFE.compareAndSwapObject(this, STACK, h, c);// obj:包含要修改的字段对象 offset:字段在对象内的偏移量 expect:字段的期望值  update:如果该字段的值等于字段的期望值，用于更新字段的新值
     }
 
     /** Unconditionally pushes c onto stack, retrying if necessary. */
@@ -460,7 +460,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     }
 
     static void lazySetNext(Completion c, Completion next) {
-        UNSAFE.putOrderedObject(c, NEXT, next);
+        UNSAFE.putOrderedObject(c, NEXT, next);// putOrderedObject(作用：设置一个对象字段)
     }
 
     /**
@@ -549,10 +549,10 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
     }
 
     /** Pushes the given completion (if it exists) unless done. */
-    final void push(UniCompletion<?,?> c) {
+    final void push(UniCompletion<?,?> c) { //为本次操作的上一个 CompletableFuture 对象调用，也就是说当前操作所依赖的前置操作的CompletableFuture 对象会尝试将当前操作压入栈中
         if (c != null) {
             while (result == null && !tryPushStack(c))
-                lazySetNext(c, null); // clear on failure
+                lazySetNext(c, null); // clear on failure  // 如果上一个操作尚未完成，本次操作自然也无法执行，只能尝试将本次操作暂存到上一个操作对应的 CompletableFuture 对象的无锁并发栈中。
         }
     }
 
@@ -730,8 +730,8 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
         CompletableFuture<Void> d = new CompletableFuture<Void>();
         if (e != null || !d.uniRun(this, f, null)) {
             UniRun<T> c = new UniRun<T>(e, d, this, f);
-            push(c);
-            c.tryFire(SYNC);
+            push(c); // 将新生成的操作对象(UniRun)添加到上一个 CompletableFuture 对象的栈中
+            c.tryFire(SYNC); //尝试执行本次操作的任务逻辑
         }
         return d;
     }
